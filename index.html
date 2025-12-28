@@ -1,131 +1,161 @@
 <!doctype html>
 <html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Pushup Analyzer</title>
-  <style>
-    body { font-family: system-ui, Arial; margin: 0; background: #0b0b0f; color: #fff; }
-    header { padding: 24px 18px; max-width: 1100px; margin: 0 auto; }
-    .wrap { max-width: 1100px; margin: 0 auto; padding: 0 18px 30px; }
-    .card { background: #151521; border: 1px solid #2a2a3a; border-radius: 16px; padding: 16px; }
-    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-    button { background:#2f62ff; color:#fff; border:0; padding:10px 14px; border-radius:12px; cursor:pointer; font-weight:600; }
-    button:disabled { opacity:.5; cursor:not-allowed; }
-    input[type="file"] { color:#cfd3ff; }
-    .muted { opacity:.8; }
-    .err { color:#ffb4b4; }
-    .ok { color:#b8ffcc; }
-    table { width:100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { border-bottom: 1px solid #2a2a3a; padding: 8px; text-align:left; font-size: 14px; }
-  </style>
-</head>
-<body>
-  <header>
-    <h1 style="margin:0 0 8px 0;">Pushup Analyzer</h1>
-    <div class="muted">Upload a video. Get rep count + confidence. This UI is fully yours.</div>
-  </header>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pushup Analyzer</title>
+    <style>
+      body { font-family: system-ui, Arial; margin: 0; background: #0b0b0f; color: #fff; }
+      header { padding: 28px 18px 12px; max-width: 1100px; margin: 0 auto; }
+      .wrap { max-width: 1100px; margin: 0 auto; padding: 0 18px 40px; }
+      .card { background: #151521; border: 1px solid #2a2a3a; border-radius: 16px; padding: 16px; }
+      .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+      button {
+        background: #2b67ff; color: #fff; border: 0; border-radius: 12px;
+        padding: 12px 16px; font-weight: 700; cursor: pointer;
+      }
+      button:disabled { opacity: 0.55; cursor: not-allowed; }
+      input[type="file"] { color: #ddd; }
+      .muted { opacity: 0.82; }
+      .err { color: #ff9b9b; white-space: pre-wrap; }
+      .ok { color: #b6ffb6; }
+      .grid { display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 14px; }
+      video { width: 100%; border-radius: 14px; border: 1px solid #2a2a3a; background: #000; }
+      .pill { display: inline-block; padding: 6px 10px; border-radius: 999px; background:#0f1220; border:1px solid #2a2a3a; }
+      pre { margin: 0; white-space: pre-wrap; word-break: break-word; background:#0f1220; border:1px solid #2a2a3a; padding:12px; border-radius: 12px; }
+      a { color: #8ab4ff; }
+    </style>
+  </head>
 
-  <div class="wrap">
-    <div class="card">
-      <div class="row">
-        <input id="file" type="file" accept="video/mp4,video/quicktime,video/*" />
-        <button id="btn">Analyze</button>
-        <span id="status" class="muted"></span>
+  <body>
+    <header>
+      <h1 style="margin:0 0 8px 0;">Pushup Analyzer</h1>
+      <div class="muted">Upload a video. Get rep count + confidence. The UI here is yours.</div>
+    </header>
+
+    <div class="wrap">
+      <div class="card">
+        <div class="row">
+          <input id="file" type="file" accept="video/mp4,video/*" />
+          <button id="run">Analyze</button>
+          <span id="status" class="pill muted">Idle</span>
+        </div>
+
+        <div style="margin-top:10px;" class="muted">
+          Backend:
+          <a id="backendLink" href="#" target="_blank" rel="noreferrer">open HF Space</a>
+        </div>
+
+        <div class="grid">
+          <div>
+            <div id="msg" class="muted" style="margin-bottom:10px;"></div>
+            <div id="err" class="err"></div>
+            <div id="summary" class="ok"></div>
+          </div>
+
+          <div>
+            <video id="outVideo" controls playsinline style="display:none;"></video>
+          </div>
+
+          <div>
+            <div class="muted" style="margin-bottom:8px;">Raw JSON (debug)</div>
+            <pre id="json">{}</pre>
+          </div>
+        </div>
       </div>
-
-      <div id="result" style="margin-top:14px;"></div>
     </div>
-  </div>
 
-  <script type="module">
-    import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
+    <script type="module">
+      import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
 
-    // CHANGE THIS:
-    const SPACE_ID = "gibil-pushup-prototype"; // example: "username/space_name" OR "space_name" if it resolves
-    const API_NAME = "/analyze";              // matches api_name="analyze"
+      // IMPORTANT: put your real HF Space URL here
+      const SPACE_URL = "https://gibil-pushup-prototype.hf.space";
 
-    const fileEl = document.getElementById("file");
-    const btn = document.getElementById("btn");
-    const statusEl = document.getElementById("status");
-    const resultEl = document.getElementById("result");
+      const fileEl = document.getElementById("file");
+      const runBtn = document.getElementById("run");
+      const statusEl = document.getElementById("status");
+      const msgEl = document.getElementById("msg");
+      const errEl = document.getElementById("err");
+      const summaryEl = document.getElementById("summary");
+      const jsonEl = document.getElementById("json");
+      const outVideo = document.getElementById("outVideo");
+      const backendLink = document.getElementById("backendLink");
+      backendLink.href = SPACE_URL;
 
-    function setStatus(msg, isError=false) {
-      statusEl.textContent = msg;
-      statusEl.className = isError ? "err" : "muted";
-    }
-
-    function renderResult(data) {
-      if (!data?.ok) {
-        resultEl.innerHTML = `<div class="err">Error: ${data?.error ?? "Unknown error"}</div>`;
-        return;
+      function setStatus(text) {
+        statusEl.textContent = text;
       }
 
-      const repCount = data.rep_count ?? 0;
-      const avgProb = data.avg_prob ?? 0;
+      function clearOutput() {
+        errEl.textContent = "";
+        summaryEl.textContent = "";
+        msgEl.textContent = "";
+        jsonEl.textContent = "{}";
+        outVideo.style.display = "none";
+        outVideo.src = "";
+      }
 
-      let rows = "";
-      (data.rep_events || []).forEach(r => {
-        rows += `
-          <tr>
-            <td>${r.rep}</td>
-            <td>${r.start_t?.toFixed?.(2) ?? r.start_t}</td>
-            <td>${r.end_t?.toFixed?.(2) ?? r.end_t}</td>
-            <td>${(r.prob ?? 0).toFixed(2)}</td>
-          </tr>
-        `;
+      runBtn.addEventListener("click", async () => {
+        clearOutput();
+
+        const file = fileEl.files?.[0];
+        if (!file) {
+          errEl.textContent = "Pick a video first.";
+          return;
+        }
+
+        runBtn.disabled = true;
+        setStatus("Connecting...");
+        msgEl.textContent = "Connecting to backend...";
+
+        try {
+          const client = await Client.connect(SPACE_URL);
+
+          setStatus("Uploading...");
+          msgEl.textContent = "Uploading and running analysis... (this can take a bit)";
+
+          // Calls the api_name="analyze" we set in app.py
+          const res = await client.predict("/analyze", {
+            "uploaded_file": file
+          });
+
+          // res.data is [jsonResult, annotatedVideo]
+          const resultJson = res.data?.[0];
+          const annotated = res.data?.[1];
+
+          jsonEl.textContent = JSON.stringify(resultJson ?? {}, null, 2);
+
+          if (!resultJson || resultJson.ok === false) {
+            errEl.textContent = "Error: " + (resultJson?.error ?? "Unknown error");
+            setStatus("Error");
+            return;
+          }
+
+          const reps = resultJson.rep_count ?? 0;
+          const avg = resultJson.avg_rep_prob;
+          summaryEl.textContent =
+            `Reps: ${reps}` + (avg === null || avg === undefined ? "" : ` | Avg confidence: ${avg.toFixed(2)}`);
+
+          // annotated may be {url: "..."} or a string url depending on gradio
+          let videoUrl = null;
+          if (typeof annotated === "string") videoUrl = annotated;
+          if (annotated && typeof annotated === "object" && annotated.url) videoUrl = annotated.url;
+
+          if (videoUrl) {
+            outVideo.src = videoUrl;
+            outVideo.style.display = "block";
+          }
+
+          setStatus("Done");
+          msgEl.textContent = "Finished.";
+
+        } catch (e) {
+          errEl.textContent = "Frontend error: " + (e?.message ?? String(e));
+          setStatus("Error");
+        } finally {
+          runBtn.disabled = false;
+        }
       });
-
-      const table = (data.rep_events && data.rep_events.length)
-        ? `
-          <table>
-            <thead>
-              <tr><th>Rep</th><th>Start (s)</th><th>End (s)</th><th>Prob</th></tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        `
-        : `<div class="muted" style="margin-top:8px;">No reps detected.</div>`;
-
-      resultEl.innerHTML = `
-        <div class="ok">✅ Done</div>
-        <div style="margin-top:8px;">Reps: <b>${repCount}</b></div>
-        <div>Avg confidence: <b>${avgProb.toFixed(2)}</b></div>
-        ${table}
-      `;
-    }
-
-    btn.addEventListener("click", async () => {
-      const file = fileEl.files?.[0];
-      if (!file) {
-        setStatus("Pick a video first.", true);
-        return;
-      }
-
-      btn.disabled = true;
-      resultEl.innerHTML = "";
-      setStatus("Connecting…");
-
-      try {
-        const client = await Client.connect(SPACE_ID);
-
-        setStatus("Uploading + analyzing… (this can take a bit)");
-        const out = await client.predict(API_NAME, {
-          video_file_path: file  // name must match the python function arg on the API
-        });
-
-        // gradio client returns { data: [...] } usually
-        const payload = out?.data?.[0] ?? out?.data ?? out;
-        renderResult(payload);
-        setStatus("");
-      } catch (e) {
-        console.error(e);
-        setStatus(`Failed: ${e?.message ?? e}`, true);
-        resultEl.innerHTML = `<div class="err">Error: ${e?.message ?? e}</div>`;
-      } finally {
-        btn.disabled = false;
-      }
-    });
-  </script>
-</body>
+    </script>
+  </body>
 </html>
