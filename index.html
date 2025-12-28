@@ -30,7 +30,7 @@
   </head>
   <body>
     <header>
-      <h1 style="margin:0 0 8px 0;">Pushup Analyzer V4</h1>
+      <h1 style="margin:0 0 8px 0;">Pushup Analyzer V5</h1>
       <div class="muted">Custom UI on GitHub Pages. Backend runs on your HF Space.</div>
     </header>
 
@@ -73,12 +73,11 @@
     <script type="module">
       import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
     
-      // IMPORTANT:
-      // Client.connect expects "username/space_name"
+      // MUST be owner/space_name
       const SPACE_ID = "gibil/pushup-prototype";
     
-      // This is just for the clickable link in the UI
-      const spaceUrl = "https://gibil-pushup-prototype.hf.space";
+      // This is your actual Space URL
+      const spaceUrl = `https://${SPACE_ID.replace("/", "-")}.hf.space`;
       document.getElementById("spaceLink").href = spaceUrl;
     
       const fileEl = document.getElementById("file");
@@ -97,14 +96,6 @@
         statusEl.textContent = msg || "";
       }
     
-      function prettyErr(e) {
-        if (!e) return "Unknown error";
-        if (typeof e === "string") return e;
-        if (e?.message) return e.message;
-        if (e?.stack) return e.stack;
-        try { return JSON.stringify(e, null, 2); } catch { return String(e); }
-      }
-    
       goEl.addEventListener("click", async () => {
         setError("");
         setStatus("");
@@ -119,21 +110,19 @@
         setStatus("Connecting to backend...");
     
         try {
-          // connect to the Space by ID (username/space_name)
+          // Connect by SPACE_ID (owner/space)
           const client = await Client.connect(SPACE_ID);
     
           setStatus("Uploading + analyzing...");
     
-          // api_name="analyze" so endpoint is "/analyze"
-          // Your python fn is api_analyze(uploaded_file) so the key is uploaded_file
+          // Option A (recommended): pass by param name (matches api_analyze(uploaded_file))
           const result = await client.predict("/analyze", {
             uploaded_file: file
           });
     
-          const data = result?.data;
-    
-          const json = data?.[0];
-          const annotated = data?.[1];
+          // Gradio returns [json, annotated_video]
+          const json = result.data?.[0];
+          const annotated = result.data?.[1];
     
           rawEl.textContent = JSON.stringify(json, null, 2);
     
@@ -148,13 +137,9 @@
           repCountEl.textContent = json.rep_count ?? 0;
           avgProbEl.textContent = Number(json.avg_rep_prob ?? 0).toFixed(2);
     
-          // annotated is usually a URL string, sometimes an object depending on gradio version
-          let url = null;
-          if (typeof annotated === "string") url = annotated;
-          else if (annotated?.url) url = annotated.url;
-    
-          if (url && url.startsWith("http")) {
-            vidEl.src = url;
+          // annotated can be a URL string (best case) or null
+          if (typeof annotated === "string") {
+            vidEl.src = annotated;
             vidEl.style.display = "block";
           } else {
             vidEl.style.display = "none";
@@ -162,7 +147,11 @@
     
           setStatus("Done.");
         } catch (e) {
-          setError(prettyErr(e));
+          // show real error details (not [object Object])
+          const msg = (e && typeof e === "object")
+            ? (e.message || JSON.stringify(e, null, 2))
+            : String(e);
+          setError(msg);
         } finally {
           goEl.disabled = false;
         }
