@@ -1,229 +1,159 @@
 <!doctype html>
-<html lang="en">
+<html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Pushup Analyzer</title>
     <style>
-      :root {
-        --bg: #0b0b0f;
-        --card: #151521;
-        --border: #2a2a3a;
-        --text: #ffffff;
-        --muted: rgba(255,255,255,0.75);
-        --blue: #2b6bff;
-      }
-      body { margin: 0; font-family: system-ui, Arial; background: var(--bg); color: var(--text); }
-      header { max-width: 1100px; margin: 0 auto; padding: 26px 18px 10px; }
-      h1 { margin: 0 0 8px 0; font-size: 44px; letter-spacing: -0.5px; }
-      p { margin: 0; color: var(--muted); }
-      .wrap { max-width: 1100px; margin: 0 auto; padding: 16px 18px 40px; }
-      .card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 18px; }
+      body { font-family: system-ui, Arial; margin: 0; background: #0b0b0f; color: #fff; }
+      header { padding: 26px 18px 10px; max-width: 1100px; margin: 0 auto; }
+      .wrap { max-width: 1100px; margin: 0 auto; padding: 0 18px 30px; }
+      .card { background: #151521; border: 1px solid #2a2a3a; border-radius: 16px; padding: 16px; }
       .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-      .btn {
-        background: var(--blue); border: 0; color: white; padding: 12px 16px;
-        border-radius: 14px; font-weight: 700; cursor: pointer;
+      button {
+        background: #2d6cff; color: white; border: 0; padding: 10px 14px;
+        border-radius: 12px; cursor: pointer; font-weight: 600;
       }
-      .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-      input[type="file"] {
-        padding: 10px; border-radius: 14px; border: 1px solid var(--border);
-        background: rgba(0,0,0,0.25); color: white;
-      }
-      .status { margin-top: 12px; color: var(--muted); }
+      button:disabled { opacity: 0.6; cursor: not-allowed; }
+      input[type="file"] { color: #cfd3ff; }
+      .muted { opacity: 0.8; font-size: 14px; }
+      .err { color: #ffb4b4; margin-top: 10px; white-space: pre-wrap; }
       .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
-      .kpi { background: rgba(0,0,0,0.25); border: 1px solid var(--border); border-radius: 16px; padding: 14px; }
-      .kpi .label { color: var(--muted); font-size: 13px; }
-      .kpi .value { font-size: 32px; font-weight: 800; margin-top: 6px; }
-      .barwrap { margin-top: 8px; height: 10px; border-radius: 999px; overflow: hidden; border: 1px solid var(--border); background: rgba(0,0,0,0.35); }
-      .bar { height: 100%; width: 0%; background: var(--blue); }
-      table { width: 100%; border-collapse: collapse; margin-top: 14px; overflow: hidden; border-radius: 16px; }
-      th, td { text-align: left; padding: 10px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 14px; }
-      th { color: var(--muted); font-weight: 700; }
-      .video { width: 100%; margin-top: 14px; border-radius: 16px; border: 1px solid var(--border); background: black; }
-      .small { font-size: 13px; color: var(--muted); margin-top: 10px; }
+      .box { background: #10101a; border: 1px solid #2a2a3a; border-radius: 14px; padding: 14px; }
+      .big { font-size: 40px; font-weight: 800; margin: 6px 0; }
+      .label { opacity: 0.7; font-size: 13px; }
+      video { width: 100%; border-radius: 14px; border: 1px solid #2a2a3a; margin-top: 12px; background: #000; }
+      pre { white-space: pre-wrap; word-break: break-word; margin: 0; }
       a { color: #8ab4ff; }
-      @media (max-width: 900px){ .grid { grid-template-columns: 1fr; } }
+      @media (max-width: 850px) { .grid { grid-template-columns: 1fr; } }
     </style>
   </head>
   <body>
     <header>
-      <h1>Pushup Analyzer</h1>
-      <p>Upload a video. Get rep count + confidence score. This UI is fully custom, backend is your HF Space.</p>
+      <h1 style="margin:0 0 8px 0;">Pushup Analyzer</h1>
+      <div class="muted">Custom UI on GitHub Pages. Backend runs on your HF Space.</div>
     </header>
 
     <div class="wrap">
       <div class="card">
         <div class="row">
-          <input id="file" type="file" accept="video/*,.mp4,.mov,.webm" />
-          <button id="run" class="btn" disabled>Analyze</button>
-          <span id="filename" style="color: var(--muted)"></span>
+          <input id="file" type="file" accept="video/*" />
+          <button id="go">Analyze</button>
+          <div id="status" class="muted"></div>
         </div>
 
-        <div id="status" class="status">Waiting for file…</div>
+        <div id="error" class="err"></div>
 
         <div class="grid">
-          <div class="kpi">
-            <div class="label">Rep count</div>
-            <div id="repCount" class="value">—</div>
+          <div class="box">
+            <div class="label">Rep Count</div>
+            <div id="repCount" class="big">—</div>
           </div>
-
-          <div class="kpi">
-            <div class="label">Confidence (avg per-rep prob)</div>
-            <div id="conf" class="value">—</div>
-            <div class="barwrap"><div id="bar" class="bar"></div></div>
+          <div class="box">
+            <div class="label">Avg Rep Confidence</div>
+            <div id="avgProb" class="big">—</div>
           </div>
         </div>
 
-        <div id="tableWrap"></div>
+        <video id="annotated" controls style="display:none;"></video>
 
-        <video id="annotated" class="video" controls style="display:none;"></video>
+        <div class="box" style="margin-top:14px;">
+          <div class="label">Raw JSON</div>
+          <pre id="raw">—</pre>
+        </div>
 
-        <div class="small">
+        <div class="muted" style="margin-top:10px;">
           If something breaks, open the backend directly:
           <a id="spaceLink" href="#" target="_blank" rel="noreferrer">HF Space</a>
         </div>
       </div>
     </div>
 
+    <!-- Official Gradio JS client -->
     <script type="module">
-      import { client, handle_file } from "https://cdn.jsdelivr.net/npm/@gradio/client/+esm";
+      import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
 
-      // ✅ CHANGE THIS to your Space URL
-      const SPACE_URL = "https://gibil-pushup-prototype.hf.space";
+      // CHANGE THIS ONLY:
+      const SPACE_ID = "gibil-pushup-prototype"; // or "username/space_name"
+
+      const spaceUrl = `https://${SPACE_ID}.hf.space`;
+      document.getElementById("spaceLink").href = spaceUrl;
 
       const fileEl = document.getElementById("file");
-      const runBtn = document.getElementById("run");
+      const goEl = document.getElementById("go");
       const statusEl = document.getElementById("status");
-      const filenameEl = document.getElementById("filename");
+      const errorEl = document.getElementById("error");
       const repCountEl = document.getElementById("repCount");
-      const confEl = document.getElementById("conf");
-      const barEl = document.getElementById("bar");
-      const tableWrap = document.getElementById("tableWrap");
-      const annotatedVideo = document.getElementById("annotated");
-      const spaceLink = document.getElementById("spaceLink");
-      spaceLink.href = SPACE_URL;
+      const avgProbEl = document.getElementById("avgProb");
+      const rawEl = document.getElementById("raw");
+      const vidEl = document.getElementById("annotated");
 
-      let selectedFile = null;
+      function setError(msg) {
+        errorEl.textContent = msg || "";
+      }
 
       function setStatus(msg) {
-        statusEl.textContent = msg;
+        statusEl.textContent = msg || "";
       }
 
-      function renderTable(repEvents) {
-        if (!repEvents || repEvents.length === 0) {
-          tableWrap.innerHTML = `<div class="small">No reps detected (or confidence too low).</div>`;
+      goEl.addEventListener("click", async () => {
+        setError("");
+        setStatus("");
+
+        const file = fileEl.files?.[0];
+        if (!file) {
+          setError("Pick a video first.");
           return;
         }
 
-        const rows = repEvents.map(r => `
-          <tr>
-            <td>${r.rep}</td>
-            <td>${r.start_t.toFixed(2)}s</td>
-            <td>${r.end_t.toFixed(2)}s</td>
-            <td>${r.prob.toFixed(2)}</td>
-          </tr>
-        `).join("");
-
-        tableWrap.innerHTML = `
-          <table>
-            <thead>
-              <tr>
-                <th>Rep</th>
-                <th>Start</th>
-                <th>End</th>
-                <th>Prob</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        `;
-      }
-
-      fileEl.addEventListener("change", () => {
-        selectedFile = fileEl.files?.[0] ?? null;
-        if (!selectedFile) {
-          runBtn.disabled = true;
-          filenameEl.textContent = "";
-          setStatus("Waiting for file…");
-          return;
-        }
-
-        // extra safety check
-        if (!selectedFile.type.startsWith("video/")) {
-          runBtn.disabled = true;
-          setStatus("Frontend error: Invalid file type. Please upload a video file.");
-          return;
-        }
-
-        filenameEl.textContent = selectedFile.name;
-        runBtn.disabled = false;
-        setStatus("Ready. Click Analyze.");
-      });
-
-      runBtn.addEventListener("click", async () => {
-        if (!selectedFile) return;
-
-        runBtn.disabled = true;
-        setStatus("Connecting to backend…");
-
-        // reset UI
-        repCountEl.textContent = "—";
-        confEl.textContent = "—";
-        barEl.style.width = "0%";
-        tableWrap.innerHTML = "";
-        annotatedVideo.style.display = "none";
-        annotatedVideo.removeAttribute("src");
+        goEl.disabled = true;
+        setStatus("Connecting to backend...");
 
         try {
-          const app = await client(SPACE_URL);
+          const client = await Client.connect(SPACE_ID);
 
-          setStatus("Uploading video to backend…");
-          // THIS is the key fix: upload file properly
-          const uploaded = await handle_file(selectedFile);
+          setStatus("Uploading + analyzing...");
 
-          setStatus("Running analysis…");
-          // api_name must match btn.click(api_name="analyze") in app.py
-          const res = await app.predict("/analyze", [uploaded]);
+          // This calls api_name="analyze" from app.py
+          const result = await client.predict("/analyze", {
+            // IMPORTANT: this key must match the *input component name* positionally
+            // Because we used a single gr.File input, passing the File directly works.
+            // The gradio client handles upload formatting correctly.
+            "uploaded_file": file
+          });
 
-          // Gradio returns { data: [ ... ] } for some endpoints, and raw for others.
-          // Our Blocks JSON output returns the JSON in res.data[0] usually.
-          const payload = Array.isArray(res.data) ? res.data[0] : res.data;
+          // Gradio returns result.data = [json, annotated_video]
+          const data = result.data;
 
-          if (!payload || payload.ok !== true) {
-            setStatus("Backend error: " + (payload?.error ?? "Unknown error"));
-            runBtn.disabled = false;
+          const json = data?.[0];
+          const annotated = data?.[1];
+
+          rawEl.textContent = JSON.stringify(json, null, 2);
+
+          if (!json?.ok) {
+            setError("Backend error: " + (json?.error || "unknown"));
+            repCountEl.textContent = "—";
+            avgProbEl.textContent = "—";
+            vidEl.style.display = "none";
             return;
           }
 
-          const repCount = payload.rep_count ?? 0;
-          const avg = payload.avg_rep_prob;
+          repCountEl.textContent = json.rep_count ?? 0;
+          avgProbEl.textContent = (json.avg_rep_prob ?? 0).toFixed(2);
 
-          repCountEl.textContent = String(repCount);
-
-          if (typeof avg === "number") {
-            confEl.textContent = avg.toFixed(2);
-            barEl.style.width = Math.max(0, Math.min(100, avg * 100)) + "%";
+          // annotated is usually a URL string
+          if (typeof annotated === "string" && annotated.startsWith("http")) {
+            vidEl.src = annotated;
+            vidEl.style.display = "block";
           } else {
-            confEl.textContent = "—";
-            barEl.style.width = "0%";
-          }
-
-          renderTable(payload.rep_events);
-
-          // annotated video (optional)
-          // Gradio often returns a server file handle object; sometimes it's a URL, sometimes a path.
-          // If it's a URL-like, we can load it. If not, we just hide it.
-          const ann = payload.annotated_video_path;
-          if (typeof ann === "string" && (ann.startsWith("http://") || ann.startsWith("https://"))) {
-            annotatedVideo.src = ann;
-            annotatedVideo.style.display = "block";
+            vidEl.style.display = "none";
           }
 
           setStatus("Done.");
         } catch (e) {
-          setStatus("Error: " + (e?.message ?? String(e)));
+          setError(String(e));
         } finally {
-          runBtn.disabled = false;
+          goEl.disabled = false;
         }
       });
     </script>
