@@ -30,7 +30,7 @@
   </head>
   <body>
     <header>
-      <h1 style="margin:0 0 8px 0;">Pushup Analyzer V5</h1>
+      <h1 style="margin:0 0 8px 0;">Pushup Analyzer V6</h1>
       <div class="muted">Custom UI on GitHub Pages. Backend runs on your HF Space.</div>
     </header>
 
@@ -71,13 +71,14 @@
 
     <!-- Official Gradio JS client -->
     <script type="module">
-      import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
+      import { Client, handle_file } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
     
-      // MUST be owner/space_name
-      const SPACE_ID = "gibil/pushup-prototype";
+      // MUST be either:
+      // 1) full URL (recommended), or
+      // 2) "username/space_name"
+      const SPACE_URL = "https://gibil-pushup-prototype.hf.space"; // change if needed
+      const spaceUrl = SPACE_URL;
     
-      // This is your actual Space URL
-      const spaceUrl = `https://${SPACE_ID.replace("/", "-")}.hf.space`;
       document.getElementById("spaceLink").href = spaceUrl;
     
       const fileEl = document.getElementById("file");
@@ -96,6 +97,14 @@
         statusEl.textContent = msg || "";
       }
     
+      function formatErr(e) {
+        // better than "[object Object]"
+        if (!e) return "Unknown error";
+        if (typeof e === "string") return e;
+        if (e?.message) return e.message;
+        try { return JSON.stringify(e, null, 2); } catch { return String(e); }
+      }
+    
       goEl.addEventListener("click", async () => {
         setError("");
         setStatus("");
@@ -106,23 +115,31 @@
           return;
         }
     
+        // Optional: restrict on frontend too
+        const okExt = [".mp4", ".mov", ".webm", ".mkv"];
+        const lower = (file.name || "").toLowerCase();
+        if (!okExt.some(ext => lower.endsWith(ext))) {
+          setError(`Please upload one of: ${okExt.join(", ")}`);
+          return;
+        }
+    
         goEl.disabled = true;
         setStatus("Connecting to backend...");
     
         try {
-          // Connect by SPACE_ID (owner/space)
-          const client = await Client.connect(SPACE_ID);
+          // Use URL connect, avoids ID metadata issues
+          const client = await Client.connect(spaceUrl);
     
           setStatus("Uploading + analyzing...");
     
-          // Option A (recommended): pass by param name (matches api_analyze(uploaded_file))
-          const result = await client.predict("/analyze", {
-            uploaded_file: file
-          });
+          // IMPORTANT: handle_file() is required
+          const result = await client.predict("/analyze", [
+            handle_file(file)
+          ]);
     
-          // Gradio returns [json, annotated_video]
-          const json = result.data?.[0];
-          const annotated = result.data?.[1];
+          const data = result?.data;
+          const json = data?.[0];
+          const annotated = data?.[1];
     
           rawEl.textContent = JSON.stringify(json, null, 2);
     
@@ -137,9 +154,13 @@
           repCountEl.textContent = json.rep_count ?? 0;
           avgProbEl.textContent = Number(json.avg_rep_prob ?? 0).toFixed(2);
     
-          // annotated can be a URL string (best case) or null
-          if (typeof annotated === "string") {
-            vidEl.src = annotated;
+          // annotated might be URL or object depending on gradio version
+          let url = null;
+          if (typeof annotated === "string") url = annotated;
+          else if (annotated?.url) url = annotated.url;
+    
+          if (url && (url.startsWith("http") || url.startsWith("blob:"))) {
+            vidEl.src = url;
             vidEl.style.display = "block";
           } else {
             vidEl.style.display = "none";
@@ -147,11 +168,7 @@
     
           setStatus("Done.");
         } catch (e) {
-          // show real error details (not [object Object])
-          const msg = (e && typeof e === "object")
-            ? (e.message || JSON.stringify(e, null, 2))
-            : String(e);
-          setError(msg);
+          setError(formatErr(e));
         } finally {
           goEl.disabled = false;
         }
