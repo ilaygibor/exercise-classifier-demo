@@ -1,169 +1,120 @@
 <!doctype html>
 <html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Pushup Prototype</title>
-  <style>
-    body { font-family: system-ui, Arial; margin: 0; background: #0b0b0f; color: #fff; }
-    header { padding: 24px 18px; max-width: 920px; margin: 0 auto; }
-    .wrap { max-width: 920px; margin: 0 auto; padding: 0 18px 40px; }
-    .card { background: #151521; border: 1px solid #2a2a3a; border-radius: 16px; padding: 16px; }
-    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-    input[type="file"] { width: 100%; }
-    button {
-      padding: 10px 14px; border-radius: 12px; border: 1px solid #2a2a3a;
-      background: #22223a; color: #fff; cursor: pointer; font-weight: 600;
-    }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
-    .kpi { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
-    .box { background: #0f0f16; border: 1px solid #2a2a3a; border-radius: 14px; padding: 12px; }
-    .big { font-size: 28px; font-weight: 800; }
-    .muted { opacity: 0.8; }
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-    th, td { border-bottom: 1px solid #2a2a3a; padding: 8px; text-align: left; font-size: 14px; }
-    video { width: 100%; border-radius: 14px; margin-top: 12px; border: 1px solid #2a2a3a; }
-    a { color: #8ab4ff; }
-  </style>
-</head>
-<body>
-  <header>
-    <h1 style="margin:0 0 6px 0;">Pushup Prototype</h1>
-    <div class="muted">Upload a video → get rep count + per-rep probability.</div>
-  </header>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pushup Analyzer</title>
+    <style>
+      body { font-family: system-ui, Arial; margin: 0; background: #0b0b0f; color: #fff; }
+      header { padding: 24px 18px; max-width: 1000px; margin: 0 auto; }
+      .wrap { max-width: 1000px; margin: 0 auto; padding: 0 18px 30px; }
+      .card { background: #151521; border: 1px solid #2a2a3a; border-radius: 16px; padding: 16px; }
+      .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+      button { background: #2b66ff; border: 0; color: #fff; padding: 10px 14px; border-radius: 12px; cursor: pointer; font-weight: 600; }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      input[type="file"] { color: #cfcfe6; }
+      .status { margin-top: 12px; opacity: 0.9; }
+      .pill { display: inline-block; padding: 6px 10px; border: 1px solid #2a2a3a; border-radius: 999px; opacity: 0.9; }
+      video { width: 100%; margin-top: 14px; border-radius: 14px; border: 1px solid #2a2a3a; background: #000; }
+      pre { white-space: pre-wrap; background: #0f0f18; border: 1px solid #2a2a3a; padding: 12px; border-radius: 14px; margin-top: 14px; }
+      a { color: #8ab4ff; }
+    </style>
+  </head>
 
-  <div class="wrap">
-    <div class="card">
-      <div class="row">
-        <input id="file" type="file" accept="video/*" />
-        <button id="run">Analyze</button>
-      </div>
+  <body>
+    <header>
+      <h1 style="margin:0 0 8px 0;">Pushup Analyzer</h1>
+      <div style="opacity:0.85;">Upload a video. Get rep count + confidence score.</div>
+    </header>
 
-      <div id="status" class="muted" style="margin-top:10px;"></div>
-
-      <div class="kpi" id="kpis" style="display:none;">
-        <div class="box">
-          <div class="muted">Rep count</div>
-          <div class="big" id="repCount">–</div>
+    <div class="wrap">
+      <div class="card">
+        <div class="row">
+          <input id="file" type="file" accept="video/*" />
+          <button id="run">Analyze</button>
+          <span id="badge" class="pill">Idle</span>
         </div>
-        <div class="box">
-          <div class="muted">Avg rep probability</div>
-          <div class="big" id="avgProb">–</div>
+
+        <div id="status" class="status"></div>
+
+        <pre id="result" style="display:none;"></pre>
+
+        <video id="outVideo" controls style="display:none;"></video>
+
+        <div style="margin-top:12px; opacity:0.8; font-size:14px;">
+          Backend:
+          <a href="https://gibil-pushup-prototype.hf.space" target="_blank" rel="noreferrer">HF Space</a>
         </div>
-      </div>
-
-      <div id="tableWrap" style="display:none;">
-        <table>
-          <thead>
-            <tr>
-              <th>Rep</th><th>Start (s)</th><th>End (s)</th><th>Prob</th>
-            </tr>
-          </thead>
-          <tbody id="tbody"></tbody>
-        </table>
-      </div>
-
-      <video id="outVideo" controls style="display:none;"></video>
-
-      <div class="muted" style="margin-top:12px; font-size:14px;">
-        Backend:
-        <a id="spaceLink" target="_blank" rel="noreferrer">open Space</a>
       </div>
     </div>
-  </div>
 
-  <script type="module">
-    import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
+    <script type="module">
+      import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/+esm";
 
-    // ✅ PUT YOUR SPACE HERE
-    const SPACE_URL = "https://gibil-pushup-prototype.hf.space";
-    document.getElementById("spaceLink").href = SPACE_URL;
-    document.getElementById("spaceLink").textContent = SPACE_URL;
+      // Put ONLY the Space slug here (or full URL works too)
+      const SPACE = "gibil-pushup-prototype"; // <- change if needed
 
-    const runBtn = document.getElementById("run");
-    const fileInput = document.getElementById("file");
-    const statusEl = document.getElementById("status");
+      const fileEl = document.getElementById("file");
+      const runBtn = document.getElementById("run");
+      const statusEl = document.getElementById("status");
+      const badgeEl = document.getElementById("badge");
+      const resultEl = document.getElementById("result");
+      const outVideo = document.getElementById("outVideo");
 
-    const kpis = document.getElementById("kpis");
-    const repCountEl = document.getElementById("repCount");
-    const avgProbEl = document.getElementById("avgProb");
+      function setBadge(text) { badgeEl.textContent = text; }
 
-    const tableWrap = document.getElementById("tableWrap");
-    const tbody = document.getElementById("tbody");
-    const outVideo = document.getElementById("outVideo");
-
-    function setStatus(msg) { statusEl.textContent = msg; }
-
-    runBtn.addEventListener("click", async () => {
-      const f = fileInput.files?.[0];
-      if (!f) { setStatus("Pick a video first."); return; }
-
-      runBtn.disabled = true;
-      setStatus("Connecting to backend…");
-
-      // Clear UI
-      kpis.style.display = "none";
-      tableWrap.style.display = "none";
-      outVideo.style.display = "none";
-      tbody.innerHTML = "";
-
-      try {
-        const client = await Client.connect(SPACE_URL);
-
-        setStatus("Uploading + running… (this can take a bit)");
-
-        // This calls the FIRST function in your Gradio app (your Interface fn).
-        // For gr.Interface(fn=gradio_run, inputs=[Video], outputs=[Textbox, Video, JSON])
-        const result = await client.predict(0, [f]);
-
-        // result.data is: [summaryText, annotatedVideo, repEvents]
-        const summaryText = result.data[0];
-        const annotated = result.data[1];
-        const repEvents = result.data[2];
-
-        // Parse rep count + avg prob from summary text (simple, works now)
-        // You can later return structured values instead if you want.
-        const repMatch = summaryText.match(/Rep count:\s*(\d+)/i);
-        const repCount = repMatch ? Number(repMatch[1]) : 0;
-
-        let avgProb = null;
-        if (Array.isArray(repEvents) && repEvents.length) {
-          avgProb = repEvents.reduce((a, r) => a + (r.prob ?? 0), 0) / repEvents.length;
+      runBtn.addEventListener("click", async () => {
+        const file = fileEl.files?.[0];
+        if (!file) {
+          statusEl.textContent = "Pick a video first.";
+          return;
         }
 
-        repCountEl.textContent = String(repCount);
-        avgProbEl.textContent = avgProb === null ? "–" : avgProb.toFixed(2);
-        kpis.style.display = "grid";
+        runBtn.disabled = true;
+        resultEl.style.display = "none";
+        outVideo.style.display = "none";
+        statusEl.textContent = "";
+        setBadge("Connecting...");
 
-        if (Array.isArray(repEvents) && repEvents.length) {
-          for (const r of repEvents) {
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-              <td>${r.rep}</td>
-              <td>${(r.start_t ?? 0).toFixed(2)}</td>
-              <td>${(r.end_t ?? 0).toFixed(2)}</td>
-              <td>${(r.prob ?? 0).toFixed(2)}</td>
-            `;
-            tbody.appendChild(tr);
+        try {
+          const client = await Client.connect(SPACE);
+
+          setBadge("Running...");
+          statusEl.textContent = "Uploading + analyzing...";
+
+          // IMPORTANT: api_name must match what you set in app.py (api_name="analyze")
+          const res = await client.predict("/analyze", {
+            video_file: file  // key name must match your Interface input name
+          });
+
+          // res.data matches your outputs order:
+          // [summary_text, annotated_video, rep_events_json]
+          const [summary, annotated, repEvents] = res.data;
+
+          setBadge("Done");
+          statusEl.textContent = "Finished.";
+
+          resultEl.style.display = "block";
+          resultEl.textContent =
+            String(summary ?? "") +
+            "\n\nPer-rep details:\n" +
+            JSON.stringify(repEvents ?? [], null, 2);
+
+          // annotated can be null if you returned None
+          if (annotated?.url) {
+            outVideo.src = annotated.url;
+            outVideo.style.display = "block";
+          } else {
+            outVideo.style.display = "none";
           }
-          tableWrap.style.display = "block";
-        }
 
-        // annotated is usually an object like { url: "..." } depending on gradio version
-        const videoUrl = annotated?.url || annotated;
-        if (videoUrl) {
-          outVideo.src = videoUrl;
-          outVideo.style.display = "block";
+        } catch (err) {
+          setBadge("Error");
+          statusEl.textContent = "Error: " + (err?.message || String(err));
+        } finally {
+          runBtn.disabled = false;
         }
-
-        setStatus("Done.");
-      } catch (e) {
-        console.error(e);
-        setStatus("Error: " + (e?.message || String(e)));
-      } finally {
-        runBtn.disabled = false;
-      }
-    });
-  </script>
-</body>
+      });
+    </script>
+  </body>
 </html>
