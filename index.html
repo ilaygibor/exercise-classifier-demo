@@ -30,7 +30,7 @@
   </head>
   <body>
     <header>
-      <h1 style="margin:0 0 8px 0;">Pushup Analyzer V3</h1>
+      <h1 style="margin:0 0 8px 0;">Pushup Analyzer V4</h1>
       <div class="muted">Custom UI on GitHub Pages. Backend runs on your HF Space.</div>
     </header>
 
@@ -119,7 +119,7 @@
             // IMPORTANT: this key must match the *input component name* positionally
             // Because we used a single gr.File input, passing the File directly works.
             // The gradio client handles upload formatting correctly.
-            ""file"": file
+            ""uploaded_file"": file
           });
 
           // Gradio returns result.data = [json, annotated_video]
