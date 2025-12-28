@@ -2,38 +2,245 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Pushup Prototype</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Pushup Analyzer</title>
     <style>
-      body { font-family: system-ui, Arial; margin: 0; background: #0b0b0f; color: #fff; }
-      header { padding: 24px 18px; max-width: 1100px; margin: 0 auto; }
-      .card { background: #151521; border: 1px solid #2a2a3a; border-radius: 16px; padding: 16px; }
-      .wrap { max-width: 1100px; margin: 0 auto; padding: 0 18px 30px; }
-      iframe { width: 100%; height: 820px; border: 0; border-radius: 16px; overflow: hidden; }
-      a { color: #8ab4ff; }
+      body { font-family: system-ui, Arial; background:#0b0b0f; color:#fff; margin:0; }
+      .wrap { max-width: 980px; margin: 0 auto; padding: 28px 18px; }
+      .card { background:#151521; border:1px solid #2a2a3a; border-radius:18px; padding:18px; }
+      h1 { margin: 0 0 8px; }
+      .sub { opacity:.8; margin-bottom: 18px; }
+      .row { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+      input[type="file"] { display:none; }
+      .btn {
+        display:inline-flex; align-items:center; justify-content:center;
+        padding:12px 14px; border-radius:14px; cursor:pointer;
+        border:1px solid #2a2a3a; background:#0f1020; color:#fff;
+      }
+      .btn:hover { filter:brightness(1.08); }
+      .btn.primary { background:#2d5bff; border-color:#2d5bff; }
+      .btn:disabled { opacity:.5; cursor:not-allowed; }
+      .hint { opacity:.75; font-size:14px; }
+      .bar { height:10px; background:#0f1020; border:1px solid #2a2a3a; border-radius:999px; overflow:hidden; }
+      .bar > div { height:100%; width:0%; background:#2d5bff; transition:width .2s; }
+      .grid { display:grid; gap:14px; grid-template-columns: 1fr; margin-top:16px; }
+      @media(min-width: 840px){ .grid{ grid-template-columns: 1fr 1fr; } }
+      .kpi { font-size:34px; font-weight:800; margin: 6px 0; }
+      .pill { display:inline-block; padding:4px 10px; border-radius:999px; border:1px solid #2a2a3a; background:#0f1020; font-size:13px; opacity:.9;}
+      video { width:100%; border-radius:14px; border:1px solid #2a2a3a; background:#000; }
+      pre { white-space:pre-wrap; word-break:break-word; }
     </style>
   </head>
+
   <body>
-    <header>
-      <h1 style="margin:0 0 8px 0;">Pushup Prototype v3</h1>
-      <div style="opacity:0.85;">Upload a video, get rep count + per-rep probability.</div>
-    </header>
-
-
-
-
-    
     <div class="wrap">
+      <h1>Pushup Analyzer</h1>
+      <div class="sub">Upload a video. Get rep count + a confidence score. The UI here is yours.</div>
+
       <div class="card">
-        <iframe
-          src="https://gibil-pushup-prototype.hf.space"
-          allow="camera; microphone; clipboard-read; clipboard-write"
-        ></iframe>
-        <div style="margin-top:10px; opacity:0.8; font-size:14px;">
-          If the embed fails, open it directly:
-          <a href="https://gibil-pushup-prototype.hf.space" target="_blank" rel="noreferrer">Launch the app</a>
+        <div class="row">
+          <label class="btn" for="file">Choose video</label>
+          <input id="file" type="file" accept="video/*" />
+          <button id="run" class="btn primary" disabled>Analyze</button>
+          <span id="filename" class="hint">No file selected</span>
+        </div>
+
+        <div style="margin-top:14px;">
+          <div class="hint" id="status">Waiting for a video…</div>
+          <div class="bar" style="margin-top:10px;"><div id="prog"></div></div>
+        </div>
+
+        <div class="grid" id="results" style="display:none;">
+          <div class="card" style="padding:14px;">
+            <div class="pill">Results</div>
+            <div class="kpi" id="repCount">–</div>
+            <div class="hint" id="avgProb">–</div>
+            <div style="margin-top:12px;" class="hint">
+              Raw summary:
+              <pre id="summary" style="margin:8px 0 0; opacity:.9;"></pre>
+            </div>
+          </div>
+
+          <div class="card" style="padding:14px;">
+            <div class="pill">Annotated output (optional)</div>
+            <div class="hint" style="margin:8px 0 10px;">If your API returns an annotated video path/url, you can show it here.</div>
+            <video id="outVideo" controls style="display:none;"></video>
+          </div>
+        </div>
+
+        <div class="hint" style="margin-top:12px;">
+          If something breaks, open the backend directly:
+          <a class="hint" href="#" id="backendLink" target="_blank" rel="noreferrer">HF Space</a>
         </div>
       </div>
     </div>
+
+    <script>
+      // 1) Put your Space URL here:
+      const SPACE = "https://gibil-pushup-prototype.hf.space"; // change if yours differs
+      document.getElementById("backendLink").href = SPACE;
+
+      const fileEl = document.getElementById("file");
+      const runBtn = document.getElementById("run");
+      const filenameEl = document.getElementById("filename");
+      const statusEl = document.getElementById("status");
+      const progEl = document.getElementById("prog");
+
+      const resultsEl = document.getElementById("results");
+      const repCountEl = document.getElementById("repCount");
+      const avgProbEl = document.getElementById("avgProb");
+      const summaryEl = document.getElementById("summary");
+      const outVideoEl = document.getElementById("outVideo");
+
+      let selectedFile = null;
+
+      function setProgress(pct){
+        progEl.style.width = `${pct}%`;
+      }
+
+      fileEl.addEventListener("change", () => {
+        selectedFile = fileEl.files?.[0] || null;
+        filenameEl.textContent = selectedFile ? selectedFile.name : "No file selected";
+        runBtn.disabled = !selectedFile;
+        resultsEl.style.display = "none";
+        outVideoEl.style.display = "none";
+        outVideoEl.src = "";
+        statusEl.textContent = selectedFile ? "Ready to analyze." : "Waiting for a video…";
+        setProgress(0);
+      });
+
+      async function uploadFileToGradio(file){
+        // Gradio Spaces use a two-step upload:
+        // 1) POST file to /upload (returns a tmp path)
+        // 2) Call /run/predict (or /api/predict depending on version) with that path
+
+        const fd = new FormData();
+        fd.append("files", file);
+
+        // Some spaces use /upload, others /gradio_api/upload. We'll try both.
+        async function tryUpload(url){
+          const r = await fetch(url, { method:"POST", body: fd });
+          if(!r.ok) throw new Error("Upload failed: " + r.status);
+          return r.json();
+        }
+
+        try {
+          return await tryUpload(`${SPACE}/upload`);
+        } catch (e) {
+          return await tryUpload(`${SPACE}/gradio_api/upload`);
+        }
+      }
+
+      async function callPredict(tmpPath){
+        // Try the common endpoints used by Gradio
+        const payload = { data: [ { path: tmpPath } ] };
+
+        async function tryPredict(url){
+          const r = await fetch(url, {
+            method:"POST",
+            headers: { "Content-Type":"application/json" },
+            body: JSON.stringify(payload)
+          });
+          if(!r.ok) throw new Error("Predict failed: " + r.status);
+          return r.json();
+        }
+
+        // Newer: /gradio_api/run/predict
+        try { return await tryPredict(`${SPACE}/gradio_api/run/predict`); } catch(e) {}
+        // Older: /run/predict
+        try { return await tryPredict(`${SPACE}/run/predict`); } catch(e) {}
+        // Alternative: /api/predict
+        return await tryPredict(`${SPACE}/api/predict`);
+      }
+
+      function parseOutputs(gradioResponse){
+        // Gradio returns { data: [textbox, video, json], ... } usually.
+        const data = gradioResponse.data || [];
+        const summary = data[0] ?? "";
+        const videoObj = data[1] ?? null;
+        const repEvents = data[2] ?? [];
+
+        // video might be: { "name": "...", "data": "..." } or { "path": "..."} depending.
+        let videoUrl = null;
+        if (videoObj && typeof videoObj === "object") {
+          if (videoObj.url) videoUrl = videoObj.url;
+          if (videoObj.path) videoUrl = `${SPACE}/file=${videoObj.path}`;
+          if (videoObj.name) videoUrl = `${SPACE}/file=${videoObj.name}`;
+        }
+
+        return { summary, videoUrl, repEvents };
+      }
+
+      function extractMetrics(summaryText, repEvents){
+        // Your Python summary currently includes lines like:
+        // "Rep count: X"
+        // "Avg rep probability: Y"
+        const repMatch = summaryText.match(/Rep count:\s*(\d+)/i);
+        const repCount = repMatch ? parseInt(repMatch[1], 10) : (repEvents?.length || 0);
+
+        let avg = null;
+        const avgMatch = summaryText.match(/Avg rep probability:\s*([0-9.]+)/i);
+        if (avgMatch) avg = parseFloat(avgMatch[1]);
+        if (avg == null && repEvents?.length) {
+          avg = repEvents.reduce((s,r)=>s+(r.prob||0),0) / repEvents.length;
+        }
+
+        return { repCount, avg };
+      }
+
+      runBtn.addEventListener("click", async () => {
+        if(!selectedFile) return;
+
+        runBtn.disabled = true;
+        statusEl.textContent = "Uploading video…";
+        setProgress(15);
+
+        try {
+          const up = await uploadFileToGradio(selectedFile);
+
+          // Upload response usually looks like: [ { "name": "...", "data": null } ] OR { files: [...] }
+          const tmpPath =
+            (Array.isArray(up) && up[0] && (up[0].path || up[0].name)) ? (up[0].path || up[0].name) :
+            (up.files && up.files[0] && (up.files[0].path || up.files[0].name)) ? (up.files[0].path || up.files[0].name) :
+            null;
+
+          if(!tmpPath) throw new Error("Could not read upload response (tmp path missing).");
+
+          statusEl.textContent = "Running model (this can take a bit)…";
+          setProgress(40);
+
+          const pred = await callPredict(tmpPath);
+          setProgress(85);
+
+          const { summary, videoUrl, repEvents } = parseOutputs(pred);
+          const { repCount, avg } = extractMetrics(summary, repEvents);
+
+          repCountEl.textContent = `${repCount}`;
+          avgProbEl.textContent = (avg != null)
+            ? `Average rep confidence: ${avg.toFixed(2)}`
+            : `No confidence score returned`;
+
+          summaryEl.textContent = summary || "(no summary returned)";
+          resultsEl.style.display = "grid";
+
+          if(videoUrl){
+            outVideoEl.src = videoUrl;
+            outVideoEl.style.display = "block";
+          } else {
+            outVideoEl.style.display = "none";
+          }
+
+          statusEl.textContent = "Done.";
+          setProgress(100);
+
+        } catch (err) {
+          console.error(err);
+          statusEl.textContent = "Error: " + (err?.message || err);
+          setProgress(0);
+        } finally {
+          runBtn.disabled = false;
+        }
+      });
+    </script>
   </body>
 </html>
