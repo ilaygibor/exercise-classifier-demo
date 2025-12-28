@@ -73,8 +73,8 @@
     <script type="module">
       import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
     
-      // Put your Space id here. Prefer "username/space_name".
-      const SPACE_ID = "gibil/pushup-prototype"; // example format: "username/space_name"
+      // IMPORTANT: use username/space_name
+      const SPACE_ID = "YOUR_USERNAME/gibil-pushup-prototype";
     
       const spaceUrl = `https://${SPACE_ID.replace("/", "-")}.hf.space`;
       document.getElementById("spaceLink").href = spaceUrl;
@@ -88,8 +88,10 @@
       const rawEl = document.getElementById("raw");
       const vidEl = document.getElementById("annotated");
     
-      function setError(msg) {
-        errorEl.textContent = msg || "";
+      function showError(e) {
+        if (!e) errorEl.textContent = "";
+        else if (typeof e === "string") errorEl.textContent = e;
+        else errorEl.textContent = JSON.stringify(e, null, 2);
       }
     
       function setStatus(msg) {
@@ -97,12 +99,12 @@
       }
     
       goEl.addEventListener("click", async () => {
-        setError("");
+        showError("");
         setStatus("");
     
         const file = fileEl.files?.[0];
         if (!file) {
-          setError("Pick a video first.");
+          showError("Pick a video first.");
           return;
         }
     
@@ -111,9 +113,10 @@
     
         try {
           const client = await Client.connect(SPACE_ID);
+    
           setStatus("Uploading + analyzing...");
     
-          // FIX: use positional input to match inputs=[video_file]
+          // ✅ single input -> pass as an array, in order
           const result = await client.predict("/analyze", [file]);
     
           const data = result?.data;
@@ -123,7 +126,7 @@
           rawEl.textContent = JSON.stringify(json, null, 2);
     
           if (!json?.ok) {
-            setError("Backend error: " + (json?.error || "unknown"));
+            showError("Backend error: " + (json?.error || "unknown"));
             repCountEl.textContent = "—";
             avgProbEl.textContent = "—";
             vidEl.style.display = "none";
@@ -133,9 +136,13 @@
           repCountEl.textContent = json.rep_count ?? 0;
           avgProbEl.textContent = Number(json.avg_rep_prob ?? 0).toFixed(2);
     
-          // annotated is usually a URL string
-          if (typeof annotated === "string" && annotated.startsWith("http")) {
-            vidEl.src = annotated;
+          // Gradio sometimes returns a URL string, sometimes an object
+          let url = null;
+          if (typeof annotated === "string") url = annotated;
+          else if (annotated && typeof annotated === "object") url = annotated.url || annotated.path || null;
+    
+          if (url && typeof url === "string") {
+            vidEl.src = url;
             vidEl.style.display = "block";
           } else {
             vidEl.style.display = "none";
@@ -143,7 +150,10 @@
     
           setStatus("Done.");
         } catch (e) {
-          setError(String(e));
+          // ✅ show the real error instead of [object Object]
+          showError({ message: e?.message, error: e });
+          console.error(e);
+          setStatus("");
         } finally {
           goEl.disabled = false;
         }
