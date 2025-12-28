@@ -73,10 +73,12 @@
     <script type="module">
       import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
     
-      // IMPORTANT: use username/space_name
-      const SPACE_ID = "YOUR_USERNAME/gibil-pushup-prototype";
+      // IMPORTANT:
+      // Client.connect expects "username/space_name"
+      const SPACE_ID = "gibil/pushup-prototype";
     
-      const spaceUrl = `https://${SPACE_ID.replace("/", "-")}.hf.space`;
+      // This is just for the clickable link in the UI
+      const spaceUrl = "https://gibil-pushup-prototype.hf.space";
       document.getElementById("spaceLink").href = spaceUrl;
     
       const fileEl = document.getElementById("file");
@@ -88,23 +90,28 @@
       const rawEl = document.getElementById("raw");
       const vidEl = document.getElementById("annotated");
     
-      function showError(e) {
-        if (!e) errorEl.textContent = "";
-        else if (typeof e === "string") errorEl.textContent = e;
-        else errorEl.textContent = JSON.stringify(e, null, 2);
+      function setError(msg) {
+        errorEl.textContent = msg || "";
       }
-    
       function setStatus(msg) {
         statusEl.textContent = msg || "";
       }
     
+      function prettyErr(e) {
+        if (!e) return "Unknown error";
+        if (typeof e === "string") return e;
+        if (e?.message) return e.message;
+        if (e?.stack) return e.stack;
+        try { return JSON.stringify(e, null, 2); } catch { return String(e); }
+      }
+    
       goEl.addEventListener("click", async () => {
-        showError("");
+        setError("");
         setStatus("");
     
         const file = fileEl.files?.[0];
         if (!file) {
-          showError("Pick a video first.");
+          setError("Pick a video first.");
           return;
         }
     
@@ -112,21 +119,26 @@
         setStatus("Connecting to backend...");
     
         try {
+          // connect to the Space by ID (username/space_name)
           const client = await Client.connect(SPACE_ID);
     
           setStatus("Uploading + analyzing...");
     
-          // ✅ single input -> pass as an array, in order
-          const result = await client.predict("/analyze", [file]);
+          // api_name="analyze" so endpoint is "/analyze"
+          // Your python fn is api_analyze(uploaded_file) so the key is uploaded_file
+          const result = await client.predict("/analyze", {
+            uploaded_file: file
+          });
     
           const data = result?.data;
+    
           const json = data?.[0];
           const annotated = data?.[1];
     
           rawEl.textContent = JSON.stringify(json, null, 2);
     
           if (!json?.ok) {
-            showError("Backend error: " + (json?.error || "unknown"));
+            setError("Backend error: " + (json?.error || "unknown"));
             repCountEl.textContent = "—";
             avgProbEl.textContent = "—";
             vidEl.style.display = "none";
@@ -136,12 +148,12 @@
           repCountEl.textContent = json.rep_count ?? 0;
           avgProbEl.textContent = Number(json.avg_rep_prob ?? 0).toFixed(2);
     
-          // Gradio sometimes returns a URL string, sometimes an object
+          // annotated is usually a URL string, sometimes an object depending on gradio version
           let url = null;
           if (typeof annotated === "string") url = annotated;
-          else if (annotated && typeof annotated === "object") url = annotated.url || annotated.path || null;
+          else if (annotated?.url) url = annotated.url;
     
-          if (url && typeof url === "string") {
+          if (url && url.startsWith("http")) {
             vidEl.src = url;
             vidEl.style.display = "block";
           } else {
@@ -150,10 +162,7 @@
     
           setStatus("Done.");
         } catch (e) {
-          // ✅ show the real error instead of [object Object]
-          showError({ message: e?.message, error: e });
-          console.error(e);
-          setStatus("");
+          setError(prettyErr(e));
         } finally {
           goEl.disabled = false;
         }
