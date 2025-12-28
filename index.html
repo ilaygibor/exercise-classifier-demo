@@ -72,13 +72,13 @@
     <!-- Official Gradio JS client -->
     <script type="module">
       import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
-
-      // CHANGE THIS ONLY:
-      const SPACE_ID = "gibil-pushup-prototype"; // or "username/space_name"
-
-      const spaceUrl = `https://${SPACE_ID}.hf.space`;
+    
+      // Put your Space id here. Prefer "username/space_name".
+      const SPACE_ID = "gibil/pushup-prototype"; // example format: "username/space_name"
+    
+      const spaceUrl = `https://${SPACE_ID.replace("/", "-")}.hf.space`;
       document.getElementById("spaceLink").href = spaceUrl;
-
+    
       const fileEl = document.getElementById("file");
       const goEl = document.getElementById("go");
       const statusEl = document.getElementById("status");
@@ -87,49 +87,41 @@
       const avgProbEl = document.getElementById("avgProb");
       const rawEl = document.getElementById("raw");
       const vidEl = document.getElementById("annotated");
-
+    
       function setError(msg) {
         errorEl.textContent = msg || "";
       }
-
+    
       function setStatus(msg) {
         statusEl.textContent = msg || "";
       }
-
+    
       goEl.addEventListener("click", async () => {
         setError("");
         setStatus("");
-
+    
         const file = fileEl.files?.[0];
         if (!file) {
           setError("Pick a video first.");
           return;
         }
-
+    
         goEl.disabled = true;
         setStatus("Connecting to backend...");
-
+    
         try {
           const client = await Client.connect(SPACE_ID);
-
           setStatus("Uploading + analyzing...");
-
-          // This calls api_name="analyze" from app.py
-          const result = await client.predict("/analyze", {
-            // IMPORTANT: this key must match the *input component name* positionally
-            // Because we used a single gr.File input, passing the File directly works.
-            // The gradio client handles upload formatting correctly.
-            ""uploaded_file"": file
-          });
-
-          // Gradio returns result.data = [json, annotated_video]
-          const data = result.data;
-
+    
+          // FIX: use positional input to match inputs=[video_file]
+          const result = await client.predict("/analyze", [file]);
+    
+          const data = result?.data;
           const json = data?.[0];
           const annotated = data?.[1];
-
+    
           rawEl.textContent = JSON.stringify(json, null, 2);
-
+    
           if (!json?.ok) {
             setError("Backend error: " + (json?.error || "unknown"));
             repCountEl.textContent = "—";
@@ -137,10 +129,10 @@
             vidEl.style.display = "none";
             return;
           }
-
+    
           repCountEl.textContent = json.rep_count ?? 0;
-          avgProbEl.textContent = (json.avg_rep_prob ?? 0).toFixed(2);
-
+          avgProbEl.textContent = Number(json.avg_rep_prob ?? 0).toFixed(2);
+    
           // annotated is usually a URL string
           if (typeof annotated === "string" && annotated.startsWith("http")) {
             vidEl.src = annotated;
@@ -148,7 +140,7 @@
           } else {
             vidEl.style.display = "none";
           }
-
+    
           setStatus("Done.");
         } catch (e) {
           setError(String(e));
