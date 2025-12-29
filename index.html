@@ -132,8 +132,10 @@
           setStatus("Uploading + analyzing...");
     
           // IMPORTANT: handle_file() is required
-          const result = await client.predict("/analyze", [
-            handle_file(file)
+          const result = await client.predict("/analyze", {
+            uploaded_file: handle_file(file),
+          });
+
           ]);
     
           const data = result?.data;
