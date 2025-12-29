@@ -70,76 +70,110 @@
     </div>
 
     <script type="module">
-  import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
-
-  // Put your real HuggingFace username + space name:
-  const SPACE_ID = "YOUR_USERNAME/YOUR_SPACE_NAME";
-  const SPACE_URL = `https://${SPACE_ID.replace("/", "-")}.hf.space`;
-
-  document.getElementById("spaceLink").href = SPACE_URL;
-
-  const fileEl = document.getElementById("file");
-  const goEl = document.getElementById("go");
-  const statusEl = document.getElementById("status");
-  const errorEl = document.getElementById("error");
-  const repCountEl = document.getElementById("repCount");
-  const avgProbEl = document.getElementById("avgProb");
-  const rawEl = document.getElementById("raw");
-  const vidEl = document.getElementById("annotated");
-
-  function setError(msg) { errorEl.textContent = msg || ""; }
-  function setStatus(msg) { statusEl.textContent = msg || ""; }
-
-  goEl.addEventListener("click", async () => {
-    setError("");
-    setStatus("");
-
-    const file = fileEl.files?.[0];
-    if (!file) { setError("Pick a video first."); return; }
-
-    goEl.disabled = true;
-    setStatus("Connecting to backend...");
-
-    try {
-      // Connect by Space ID (recommended) OR by URL.
-      const client = await Client.connect(SPACE_ID);
-
-      setStatus("Uploading + analyzing...");
-
-      // IMPORTANT: for a single input, pass an array
-      const result = await client.predict("/analyze", [file]);
-
-      const [json, annotated] = result.data || [];
-
-      rawEl.textContent = JSON.stringify(json, null, 2);
-
-      if (!json?.ok) {
-        setError("Backend error: " + (json?.error || "unknown"));
-        repCountEl.textContent = "—";
-        avgProbEl.textContent = "—";
-        vidEl.style.display = "none";
-        return;
+      import { Client, handle_file } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
+    
+      // MUST be either:
+      // 1) full URL (recommended), or
+      // 2) "username/space_name"
+      const SPACE_URL = "https://gibil-pushup-prototype.hf.space"; // change if needed
+      const spaceUrl = SPACE_URL;
+    
+      document.getElementById("spaceLink").href = spaceUrl;
+    
+      const fileEl = document.getElementById("file");
+      const goEl = document.getElementById("go");
+      const statusEl = document.getElementById("status");
+      const errorEl = document.getElementById("error");
+      const repCountEl = document.getElementById("repCount");
+      const avgProbEl = document.getElementById("avgProb");
+      const rawEl = document.getElementById("raw");
+      const vidEl = document.getElementById("annotated");
+    
+      function setError(msg) {
+        errorEl.textContent = msg || "";
       }
-
-      repCountEl.textContent = json.rep_count ?? 0;
-      avgProbEl.textContent = Number(json.avg_rep_prob ?? 0).toFixed(2);
-
-      if (typeof annotated === "string" && annotated.startsWith("http")) {
-        vidEl.src = annotated;
-        vidEl.style.display = "block";
-      } else {
-        vidEl.style.display = "none";
+      function setStatus(msg) {
+        statusEl.textContent = msg || "";
       }
+    
+      function formatErr(e) {
+        // better than "[object Object]"
+        if (!e) return "Unknown error";
+        if (typeof e === "string") return e;
+        if (e?.message) return e.message;
+        try { return JSON.stringify(e, null, 2); } catch { return String(e); }
+      }
+    
+      goEl.addEventListener("click", async () => {
+        setError("");
+        setStatus("");
+    
+        const file = fileEl.files?.[0];
+        if (!file) {
+          setError("Pick a video first.");
+          return;
+        }
+    
+        // Optional: restrict on frontend too
+        const okExt = [".mp4", ".mov", ".webm", ".mkv"];
+        const lower = (file.name || "").toLowerCase();
+        if (!okExt.some(ext => lower.endsWith(ext))) {
+          setError(`Please upload one of: ${okExt.join(", ")}`);
+          return;
+        }
+    
+        goEl.disabled = true;
+        setStatus("Connecting to backend...");
+    
+        try {
+          // Use URL connect, avoids ID metadata issues
+          const client = await Client.connect(spaceUrl);
+    
+          setStatus("Uploading + analyzing...");
+    
+          // IMPORTANT: handle_file() is required
+          const result = await client.predict("/analyze", [
+            handle_file(file)
+          ]);
+    
+          const data = result?.data;
+          const json = data?.[0];
+          const annotated = data?.[1];
+    
+          rawEl.textContent = JSON.stringify(json, null, 2);
+    
+          if (!json?.ok) {
+            setError("Backend error: " + (json?.error || "unknown"));
+            repCountEl.textContent = "—";
+            avgProbEl.textContent = "—";
+            vidEl.style.display = "none";
+            return;
+          }
+    
+          repCountEl.textContent = json.rep_count ?? 0;
+          avgProbEl.textContent = Number(json.avg_rep_prob ?? 0).toFixed(2);
+    
+          // annotated might be URL or object depending on gradio version
+          let url = null;
+          if (typeof annotated === "string") url = annotated;
+          else if (annotated?.url) url = annotated.url;
+    
+          if (url && (url.startsWith("http") || url.startsWith("blob:"))) {
+            vidEl.src = url;
+            vidEl.style.display = "block";
+          } else {
+            vidEl.style.display = "none";
+          }
+    
+          setStatus("Done.");
+        } catch (e) {
+          setError(formatErr(e));
+        } finally {
+          goEl.disabled = false;
+        }
+      });
+    </script>
 
-      setStatus("Done.");
-    } catch (e) {
-      // This is why you saw [object Object]
-      setError(e?.message ? `${e.message}\n${JSON.stringify(e, null, 2)}` : String(e));
-    } finally {
-      goEl.disabled = false;
-    }
-  });
-</script>
 
   </body>
 </html>
